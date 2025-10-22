@@ -12,11 +12,11 @@ const char* BROKER = "test.mosquitto.org";
 const int PORT = 1883;
 
 // TOPICOS
-const char* TOPICO_EVENTOS = "duplaLWP/seguranca/eventos";
+const char* TOPICO_STATUS = "duplaLWP/robo/status";
 
 // PINOS
-#define LED_AMARELO 10
-#define LED_VERDE 11
+#define LED_AMARELO 11
+#define LED_VERDE 10
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -92,7 +92,7 @@ void connectBroker() {
   for (int i = 0; i < 10 && !mqttClient.connected(); i++) {
     if (mqttClient.connect(clientId.c_str())) {
       Serial.println("[MQTT] Conectado com sucesso!");
-      mqttClient.subscribe(TOPICO_EVENTOS);
+      mqttClient.subscribe(TOPICO_STATUS);
       return;
     } else {
       Serial.print("[MQTT] Falha (rc=");
@@ -105,4 +105,42 @@ void connectBroker() {
   Serial.println("[MQTT] Não foi possível conectar. Reiniciando...");
   delay(3000);
   ESP.restart();
+}
+
+void updateDisplay(const char* texto) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 20);
+  display.println(texto);
+  display.display();
+}
+
+void callbackMsg(char* topic, byte* payload, unsigned int length) {
+  String msg;
+  for (int i = 0; i < length; i++) msg += (char)payload[i];
+
+  Serial.print("[MQTT] Mensagem recebida: ");
+  Serial.println(msg);
+
+  // JSON
+  StaticJsonDocument<64> doc;
+  DeserializationError error = deserializeJson(doc, msg);
+  if (error){
+    Serial.print("Erro JSON: ");
+    Serial.println(error.c_str());
+    return;       
+  }
+  String status = doc["status"] | "";
+
+  if (status == "na_linha") {
+    digitalWrite(LED_VERDE, HIGH);
+    digitalWrite(LED_AMARELO, LOW);
+    updateDisplay("Status: Robo na linha");
+  } 
+  else if (status == "fora_da_linha") {
+    digitalWrite(LED_VERDE, LOW);
+    digitalWrite(LED_AMARELO, HIGH);
+    updateDisplay("Status: Robo fora da linha");
+  }
 }
